@@ -1,8 +1,38 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiEndpoints } from "../util/apiEndpoints";
 import { Download, AlertCircle, FileText, Copy, Share2 } from "lucide-react";
 import { useParams } from "react-router-dom";
+
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"];
+const TEXT_EXTENSIONS = [
+  "txt",
+  "md",
+  "csv",
+  "json",
+  "xml",
+  "html",
+  "css",
+  "js",
+  "ts",
+  "java",
+  "sql",
+  "log",
+  "yml",
+  "yaml",
+];
+const OFFICE_EXTENSIONS = [
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "rtf",
+  "odt",
+  "ods",
+  "odp",
+];
 
 const PublicFileView = () => {
   const [file, setFile] = useState(null);
@@ -10,8 +40,16 @@ const PublicFileView = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [textLoading, setTextLoading] = useState(false);
+  const [textPreview, setTextPreview] = useState("");
+  const [textPreviewError, setTextPreviewError] = useState("");
 
   const { fileId } = useParams();
+
+  const previewProxyUrl = useMemo(
+    () => apiEndpoints.PUBLIC_FILE_CONTENT(fileId),
+    [fileId],
+  );
 
   useEffect(() => {
     if (!fileId) {
@@ -25,8 +63,8 @@ const PublicFileView = () => {
         const res = await axios.get(apiEndpoints.PUBLIC_FILE_VIEW(fileId));
         setFile(res.data);
         setError(null);
-      } catch (error) {
-        console.error("Error fetching file:", error);
+      } catch (fetchError) {
+        console.error("Error fetching file:", fetchError);
         setError("Could not retrieve the file. It may be invalid or removed.");
       } finally {
         setIsLoading(false);
@@ -37,39 +75,67 @@ const PublicFileView = () => {
   }, [fileId]);
 
   const getFileExtension = (fileName) => {
-    if (!fileName) return "";
+    if (!fileName || !fileName.includes(".")) return "";
     return fileName.split(".").pop().toLowerCase();
   };
 
   const getFileUrl = () => {
     if (!file) return null;
-
-    // Backward compatible support for older records where URL was stored in fileLocation.
     return file.cloudinaryUrl || file.fileLocation || null;
   };
 
-  const handleDownload = async () => {
-    try {
-      const sourceUrl = getFileUrl();
+  const fileUrl = getFileUrl();
+  const fileExt = getFileExtension(file?.name || "");
+  const mimeType = (file?.type || file?.mimeType || "").toLowerCase();
+  const isPDF = fileExt === "pdf" || mimeType.includes("pdf");
+  const isImage =
+    mimeType.startsWith("image/") || IMAGE_EXTENSIONS.includes(fileExt);
+  const isText = mimeType.startsWith("text/") || TEXT_EXTENSIONS.includes(fileExt);
+  const isOfficeDoc = OFFICE_EXTENSIONS.includes(fileExt);
+  const hasStructuredPreview = isPDF || isImage || isText || isOfficeDoc;
+  const googleDocsPreviewUrl = fileUrl
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`
+    : null;
 
-      if (sourceUrl) {
-        const downloadUrl = sourceUrl.replace(
-          "/upload/",
-          "/upload/fl_attachment/",
-        );
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = file.name;
-        link.click();
-        return;
+  useEffect(() => {
+    setPdfLoading(true);
+  }, [fileId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTextPreview("");
+    setTextPreviewError("");
+
+    if (!isText || !fileUrl) return undefined;
+
+    const loadTextPreview = async () => {
+      try {
+        setTextLoading(true);
+        const response = await axios.get(previewProxyUrl, { responseType: "text" });
+        if (cancelled) return;
+        const rawText =
+          typeof response.data === "string"
+            ? response.data
+            : JSON.stringify(response.data, null, 2);
+        setTextPreview(rawText);
+      } catch (textError) {
+        if (cancelled) return;
+        console.error("Text preview error:", textError);
+        setTextPreviewError("Unable to preview this text file in-browser.");
+      } finally {
+        if (!cancelled) setTextLoading(false);
       }
+    };
 
-      // Fallback to backend redirect endpoint when direct URL is unavailable.
-      window.open(apiEndpoints.DOWNLOAD_FILE(fileId), "_blank", "noopener,noreferrer");
-    } catch (error) {
-      console.error("Error downloading:", error);
-      alert("Failed to download file");
-    }
+    loadTextPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isText, fileUrl, previewProxyUrl]);
+
+  const handleDownload = () => {
+    window.open(apiEndpoints.DOWNLOAD_FILE(fileId), "_blank", "noopener,noreferrer");
   };
 
   const handleCopyLink = () => {
@@ -81,16 +147,14 @@ const PublicFileView = () => {
 
   const handleShareWhatsApp = () => {
     const shareLink = window.location.href;
-    // Use simplified message format that WhatsApp handles better
-    const fileName = file.name || "Check out this file";
+    const fileName = file?.name || "Check out this file";
     const message = `${fileName}\n${shareLink}`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    console.log("WhatsApp URL:", whatsappUrl);
-    window.open(whatsappUrl, "_blank");
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };
 
   const formatFileSize = (bytes) => {
-    const fileSize = bytes || file?.fileSize || file?.size || 0;
+    const fileSize = bytes || file?.size || 0;
     if (!fileSize || fileSize === 0) return "Unknown size";
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
@@ -98,7 +162,7 @@ const PublicFileView = () => {
       Math.floor(Math.log(fileSize) / Math.log(k)),
       sizes.length - 1,
     );
-    return Math.round((fileSize / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+    return Math.round((fileSize / Math.pow(k, i)) * 100) / 100 + ` ${sizes[i]}`;
   };
 
   const formatDate = (dateString) => {
@@ -143,16 +207,8 @@ const PublicFileView = () => {
     );
   }
 
-  const fileExt = getFileExtension(file.name);
-  const isPDF = fileExt === "pdf";
-  const isImage = ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(
-    fileExt,
-  );
-  const fileUrl = getFileUrl();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
-      {/* Header */}
       <div className="bg-white shadow-sm sticky top-0 z-50 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between gap-4">
@@ -164,8 +220,7 @@ const PublicFileView = () => {
                     {file.name}
                   </h1>
                   <p className="text-sm text-gray-500 mt-1">
-                    {formatFileSize()} •{" "}
-                    {formatDate(file.createdAt || file.uploadedAt)}
+                    {formatFileSize()} • {formatDate(file.uploadedAt)}
                   </p>
                 </div>
               </div>
@@ -191,32 +246,19 @@ const PublicFileView = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* PDF Viewer */}
-        {isPDF && fileUrl && (
+        {fileUrl && isPDF && (
           <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
             <div className="bg-gray-100 p-3 border-b border-gray-200 flex items-center justify-between">
               <p className="text-sm text-gray-600 font-medium">PDF Preview</p>
-              <div className="flex gap-2">
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={file.name}
-                  className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                >
-                  Download PDF
-                </a>
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-                >
-                  Open in New Tab
-                </a>
-              </div>
+              <a
+                href={previewProxyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              >
+                Open in New Tab
+              </a>
             </div>
             <div className="relative bg-gray-50" style={{ height: "700px" }}>
               {pdfLoading && (
@@ -228,38 +270,101 @@ const PublicFileView = () => {
                 </div>
               )}
               <iframe
-                src={`${fileUrl}#toolbar=1&navpanes=0&scrollbar=1`}
+                src={`${previewProxyUrl}#toolbar=1&navpanes=0&scrollbar=1`}
                 title={file.name}
                 className="w-full h-full"
-                onLoad={() => {
-                  setPdfLoading(false);
-                }}
-                onError={() => {
-                  setPdfLoading(false);
-                }}
+                onLoad={() => setPdfLoading(false)}
+                onError={() => setPdfLoading(false)}
                 style={{ border: "none" }}
               />
             </div>
           </div>
         )}
 
-        {/* Image Viewer */}
-        {isImage && fileUrl && (
+        {fileUrl && isImage && (
           <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8 flex justify-center p-8">
             <img
-              src={fileUrl}
+              src={previewProxyUrl}
               alt={file.name}
               className="max-h-96 object-contain"
             />
           </div>
         )}
 
-        {/* Share Link Section */}
+        {fileUrl && isText && (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+            <div className="bg-gray-100 p-3 border-b border-gray-200 flex items-center justify-between">
+              <p className="text-sm text-gray-600 font-medium">Text Preview</p>
+              <a
+                href={previewProxyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              >
+                Open Raw
+              </a>
+            </div>
+            <div className="bg-gray-950 text-gray-100 p-4 overflow-auto" style={{ maxHeight: "700px" }}>
+              {textLoading && <p className="text-sm text-gray-400">Loading text content...</p>}
+              {!textLoading && textPreviewError && (
+                <p className="text-sm text-red-400">{textPreviewError}</p>
+              )}
+              {!textLoading && !textPreviewError && (
+                <pre className="text-sm whitespace-pre-wrap break-words">{textPreview || "(Empty file)"}</pre>
+              )}
+            </div>
+          </div>
+        )}
+
+        {fileUrl && isOfficeDoc && googleDocsPreviewUrl && (
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-8">
+            <div className="bg-gray-100 p-3 border-b border-gray-200 flex items-center justify-between">
+              <p className="text-sm text-gray-600 font-medium">Document Preview</p>
+              <a
+                href={previewProxyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              >
+                Open in New Tab
+              </a>
+            </div>
+            <iframe
+              src={googleDocsPreviewUrl}
+              title={`${file.name}-doc-preview`}
+              className="w-full"
+              style={{ height: "700px", border: "none" }}
+            />
+          </div>
+        )}
+
+        {fileUrl && !hasStructuredPreview && (
+          <div className="bg-white rounded-lg shadow-lg p-8 mb-8 text-center">
+            <p className="text-gray-700 mb-4">
+              Preview is not available for this file type. You can open or download it.
+            </p>
+            <div className="flex justify-center gap-3">
+              <a
+                href={previewProxyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+              >
+                Open File
+              </a>
+              <button
+                onClick={handleDownload}
+                className="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white text-sm font-medium"
+              >
+                Download File
+              </button>
+            </div>
+          </div>
+        )}
+
         {fileUrl && (
           <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Share This File
-            </h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Share This File</h3>
             <div className="flex gap-2 mb-4">
               <input
                 type="text"
@@ -279,25 +384,20 @@ const PublicFileView = () => {
                 {copied ? "Copied!" : "Copy Link"}
               </button>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleShareWhatsApp}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                <Share2 size={18} />
-                Share on WhatsApp
-              </button>
-            </div>
+            <button
+              onClick={handleShareWhatsApp}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <Share2 size={18} />
+              Share on WhatsApp
+            </button>
           </div>
         )}
 
-        {/* No File URL */}
         {!fileUrl && (
           <div className="bg-white rounded-lg shadow-lg p-12 text-center mb-8">
             <AlertCircle size={64} className="text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">
-              Preview Not Available
-            </h3>
+            <h3 className="text-xl font-semibold text-gray-700 mb-2">Preview Not Available</h3>
             <p className="text-gray-500 mb-6">
               The file preview could not be loaded. Please download to view.
             </p>
@@ -311,41 +411,24 @@ const PublicFileView = () => {
           </div>
         )}
 
-        {/* File Info */}
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-8">
-            File Information
-          </h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-8">File Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
-              <label className="block text-gray-600 text-sm font-medium mb-2">
-                File Name
-              </label>
-              <p className="text-gray-900 font-semibold break-all">
-                {file.name}
-              </p>
+              <label className="block text-gray-600 text-sm font-medium mb-2">File Name</label>
+              <p className="text-gray-900 font-semibold break-all">{file.name}</p>
             </div>
             <div>
-              <label className="block text-gray-600 text-sm font-medium mb-2">
-                File Type
-              </label>
-              <p className="text-gray-900 font-semibold">
-                {file.fileType || file.mimeType || `.${fileExt}`}
-              </p>
+              <label className="block text-gray-600 text-sm font-medium mb-2">File Type</label>
+              <p className="text-gray-900 font-semibold">{file.type || `.${fileExt}`}</p>
             </div>
             <div>
-              <label className="block text-gray-600 text-sm font-medium mb-2">
-                File Size
-              </label>
+              <label className="block text-gray-600 text-sm font-medium mb-2">File Size</label>
               <p className="text-gray-900 font-semibold">{formatFileSize()}</p>
             </div>
             <div>
-              <label className="block text-gray-600 text-sm font-medium mb-2">
-                Shared Date
-              </label>
-              <p className="text-gray-900 font-semibold">
-                {formatDate(file.createdAt || file.uploadedAt)}
-              </p>
+              <label className="block text-gray-600 text-sm font-medium mb-2">Shared Date</label>
+              <p className="text-gray-900 font-semibold">{formatDate(file.uploadedAt)}</p>
             </div>
           </div>
         </div>

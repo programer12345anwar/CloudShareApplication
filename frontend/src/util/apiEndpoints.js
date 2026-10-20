@@ -14,4 +14,5 @@ export const apiEndpoints = {
   VERIFY_PAYMENT: `${BASE_URL}/payments/verify-payment`,
   TRANSACTIONS: `${BASE_URL}/transactions`,
   PUBLIC_FILE_VIEW: (fileId) => `${BASE_URL}/files/public/${fileId}`,
+  PUBLIC_FILE_CONTENT: (fileId) => `${BASE_URL}/files/public-content/${fileId}`,
 };
