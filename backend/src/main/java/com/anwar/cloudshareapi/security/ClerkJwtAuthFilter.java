@@ -31,41 +31,26 @@ public class ClerkJwtAuthFilter extends OncePerRequestFilter {
     private final ClerkJwksProvider jwksProvider;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.equals("/health")
+                || path.startsWith("/health/")
+                || path.equals("/swagger-ui.html")
+                || path.startsWith("/swagger-ui/")
+                || path.startsWith("/v3/api-docs/")
+                || path.equals("/v3/api-docs")
+                || path.startsWith("/webhooks/")
+                || path.startsWith("/files/public/")
+                || path.startsWith("/files/download/")
+                || path.startsWith("/public/");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws IOException, ServletException {
 
-        String path = request.getRequestURI();
-        System.out.println("🔍 ClerkJwtAuthFilter triggered for: " + path);
-
-        // =====================================================
-        // 1️⃣ Allow Swagger URLs (including context-path)
-        // =====================================================
-        if (path.equals("/api/v1.0/swagger-ui.html") ||
-                path.startsWith("/api/v1.0/swagger-ui") ||
-                path.startsWith("/api/v1.0/v3/api-docs")) {
-
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // =====================================================
-        // 2️⃣ Allow Public/Webhook/Download endpoints
-        // =====================================================
-        if (path.contains("/webhooks") ||
-                path.contains("/public") ||
-                path.contains("/download") ||
-                path.contains("/files/public") ||
-                path.contains("/files/download")) {
-
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // =====================================================
-        // 3️⃣ JWT Authentication for everything else
-        // =====================================================
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             response.sendError(HttpServletResponse.SC_FORBIDDEN,

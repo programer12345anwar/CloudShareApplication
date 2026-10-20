@@ -155,9 +155,7 @@ public class PaymentService {
 
     private void updateTransactionStatus(String razorpayOrderId, String status, String razorpayPaymentId,
             Integer creditsToAdd) {
-        paymentTransactionRepository.findAll().stream()
-                .filter(t -> t.getOrderId() != null && t.getOrderId().equals(razorpayOrderId))
-                .findFirst()
+        paymentTransactionRepository.findFirstByOrderId(razorpayOrderId)
                 .map(transaction -> {
                     transaction.setStatus(status);
                     transaction.setPaymentId(razorpayPaymentId);
@@ -175,10 +173,7 @@ public class PaymentService {
      */
     public void handleWebhookPaymentAuthorized(String orderId, String paymentId) {
         try {
-            // Find transaction by order ID
-            PaymentTransaction transaction = paymentTransactionRepository.findAll().stream()
-                    .filter(t -> t.getOrderId() != null && t.getOrderId().equals(orderId))
-                    .findFirst()
+            PaymentTransaction transaction = paymentTransactionRepository.findFirstByOrderId(orderId)
                     .orElse(null);
 
             if (transaction == null) {
@@ -248,10 +243,7 @@ public class PaymentService {
      */
     public void handleWebhookPaymentFailed(String orderId, String paymentId) {
         try {
-            // Find transaction by order ID
-            PaymentTransaction transaction = paymentTransactionRepository.findAll().stream()
-                    .filter(t -> t.getOrderId() != null && t.getOrderId().equals(orderId))
-                    .findFirst()
+            PaymentTransaction transaction = paymentTransactionRepository.findFirstByOrderId(orderId)
                     .orElse(null);
 
             if (transaction == null) {

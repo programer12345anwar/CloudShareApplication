@@ -36,11 +36,11 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose port (default 8080, can be overridden)
-EXPOSE ${SERVER_PORT:-8080}
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${SERVER_PORT:-8080}/v3/api-docs || exit 1
+    CMD curl -f http://localhost:${PORT:-${SERVER_PORT:-8080}}${SERVER_SERVLET_CONTEXT_PATH:-/api/v1.0}/health || exit 1
 
 # Environment variables (can be overridden at runtime)
 ENV JAVA_TOOL_OPTIONS="-Xmx512m -Xms256m -XX:+UseG1GC"

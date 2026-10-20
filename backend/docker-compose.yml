@@ -1,8 +1,6 @@
 # docker-compose.yml - Local development environment
 # Run all services locally with: docker-compose up
 
-version: '3.9'
-
 services:
   # MongoDB Database
   mongodb:
@@ -37,7 +35,7 @@ services:
       # Application
       SPRING_APPLICATION_NAME: cloudshareapi
       SERVER_PORT: 8080
-      SERVER_SERVLET_CONTEXT_PATH: /
+      SERVER_SERVLET_CONTEXT_PATH: /api/v1.0
 
       # MongoDB - Use service name for internal networking
       SPRING_DATA_MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/cloudshare-db?authSource=admin&retryWrites=true&w=majority
@@ -70,7 +68,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v3/api-docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1.0/health"]
       interval: 30s
       timeout: 5s
       retries: 3

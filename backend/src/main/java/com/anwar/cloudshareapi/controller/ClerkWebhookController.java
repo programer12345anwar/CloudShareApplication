@@ -1,12 +1,12 @@
 package com.anwar.cloudshareapi.controller;
 
 import com.anwar.cloudshareapi.dto.ProfileDTO;
+import com.anwar.cloudshareapi.security.ClerkWebhookSignatureVerifier;
 import com.anwar.cloudshareapi.service.ProfileService;
 import com.anwar.cloudshareapi.service.UserCreditsService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,12 +16,9 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/webhooks")
 @RequiredArgsConstructor
 public class ClerkWebhookController {
-    @Value("${clerk.webhook.secret}")
-    private String webhookSecret;
-
     private final ProfileService profileService;
-
     private final UserCreditsService userCreditsService;
+    private final ClerkWebhookSignatureVerifier signatureVerifier;
 
     @PostMapping("/clerk")
     public ResponseEntity<?> handleClerkWebhook(@RequestHeader("svix-id") String svixId,
@@ -29,7 +26,7 @@ public class ClerkWebhookController {
                                                 @RequestHeader("svix-signature") String svixSignature,
                                                 @RequestBody String payload){
         try{
-            boolean isValid=verifyWebhookSignature(svixId,svixTimestamp,svixSignature,payload);
+            boolean isValid=signatureVerifier.verify(svixId,svixTimestamp,svixSignature,payload);
             if(!isValid){
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid webhook signature");
             }
@@ -105,8 +102,4 @@ public class ClerkWebhookController {
 
     }
 
-    private boolean verifyWebhookSignature(String svixId, String svixTimestamp, String svixSignature, String payload) {
-        //validate the signature
-        return  true;
-    }
 }

@@ -117,12 +117,30 @@ Responsive design
 git clone https://github.com/programer12345anwar/cloud-share-backend.git
 cd cloud-share-backend
 
-✅ Create .env file
+✅ Configure environment
 
-Create a .env file in backend root directory:
+Create a local `.env` file in the backend directory (do not commit it). Set the
+following values using credentials from your own providers:
 
+```text
+SPRING_DATA_MONGODB_URI=
+CLERK_ISSUER=
+CLERK_JWKS_URL=
+CLERK_WEBHOOK_SECRET=
 RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
+RAZORPAY_SECRET_KEY=
+RAZORPAY_WEBHOOK_SECRET=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+```
+
+The MongoDB URI must point to the intended Atlas cluster and include the
+database name. For production, configure these values in the hosting
+provider's secret/environment settings rather than committing a `.env` file.
+Do not point a replacement cluster at production until its data has been
+restored or you have confirmed that starting with an empty database is
+intentional.
 
 ✅ Run Backend
 mvn spring-boot:run

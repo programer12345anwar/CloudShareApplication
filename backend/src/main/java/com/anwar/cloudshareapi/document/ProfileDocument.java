@@ -20,6 +20,7 @@ import java.time.Instant;
 public class ProfileDocument {
     @Id
     private String id;
+    @Indexed(name = "profiles_clerk_id_idx")
     private String clerkId;
     @Indexed(unique = true)
     private String email;
