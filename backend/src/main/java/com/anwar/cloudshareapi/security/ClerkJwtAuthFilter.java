@@ -41,6 +41,7 @@ public class ClerkJwtAuthFilter extends OncePerRequestFilter {
                 || path.equals("/v3/api-docs")
                 || path.startsWith("/webhooks/")
                 || path.startsWith("/files/public/")
+                || path.startsWith("/files/public-content/")
                 || path.startsWith("/files/download/")
                 || path.startsWith("/public/");
     }

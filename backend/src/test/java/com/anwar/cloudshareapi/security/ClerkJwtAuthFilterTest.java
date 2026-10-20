@@ -19,6 +19,14 @@ class ClerkJwtAuthFilterTest {
     }
 
     @Test
+    void skipsAuthenticationForPublicFileContent() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setServletPath("/files/public-content/file-id");
+
+        assertTrue(filter.shouldNotFilter(request));
+    }
+
+    @Test
     void keepsAuthenticationForPrivateEndpoints() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServletPath("/files/my");

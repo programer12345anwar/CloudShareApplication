@@ -52,6 +52,7 @@ public class SecurityConfig {
                                                 .requestMatchers(
                                                                 "/webhooks/**",
                                                                 "/files/public/**",
+                                                                "/files/public-content/**",
                                                                 "/files/download/**",
                                                                 "/public/**")
                                                 .permitAll()

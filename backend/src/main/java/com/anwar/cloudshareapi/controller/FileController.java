@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,37 @@ public class FileController {
     public ResponseEntity<?> getPublicFile(@PathVariable String id) {
         FileMatadataDTO file = fileMatadataService.getPublicFile(id);
         return ResponseEntity.ok(file);
+    }
+
+    /**
+     * Redirect a public file preview request to its Cloudinary URL.
+     */
+    @GetMapping("/public-content/{id}")
+    public ResponseEntity<?> getPublicFileContent(@PathVariable String id) {
+        FileMatadataDTO file = fileMatadataService.getPublicFile(id);
+        String cloudinaryUrl = file.getCloudinaryUrl();
+        if (cloudinaryUrl == null || cloudinaryUrl.isBlank()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "File URL not found"));
+        }
+
+        URI contentUri;
+        try {
+            contentUri = URI.create(cloudinaryUrl);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("error", "Stored file URL is invalid"));
+        }
+
+        if (!"https".equalsIgnoreCase(contentUri.getScheme())
+                || !"res.cloudinary.com".equalsIgnoreCase(contentUri.getHost())) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("error", "Stored file URL is not a valid Cloudinary URL"));
+        }
+
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(contentUri)
+                .build();
     }
 
     /**
